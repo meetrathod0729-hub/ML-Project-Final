@@ -1,4 +1,4 @@
-extract_features.py: import torch
+import torch
 from torch import nn
 
 from gtsrb_dataset import train_loader
