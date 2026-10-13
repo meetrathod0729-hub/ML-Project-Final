@@ -4,7 +4,7 @@ from torch import nn
 from gtsrb_dataset import train_loader
 
 
-# Same CNN architecture as gtsrb.py
+# Same CNN used in gtsrb.py
 model = nn.Sequential(
     nn.Conv2d(3, 32, 3, padding=1),
     nn.ReLU(),
@@ -31,56 +31,46 @@ model = nn.Sequential(
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = model.to(device)
 
-
-# Load trained CNN
-model.load_state_dict(torch.load("gtsrb_cnn.pth", map_location=device))
+# Load the trained CNN
+model.load_state_dict(
+    torch.load(
+        "gtsrb_cnn.pth",
+        map_location=device,
+        weights_only=True
+    )
+)
 
 model.eval()
 
-
-# Remove the final 43-class layer
-feature_extractor = nn.Sequential(
+# Remove the final classification layer
+feature_model = nn.Sequential(
     *list(model.children())[:-1]
-)
+).to(device)
 
-feature_extractor = feature_extractor.to(device)
-
-
-# Store features and labels
 all_features = []
 all_labels = []
 
-print("Extracting features...")
-
+print("Extracting features from the full training split...")
+print("Device:", device)
 
 with torch.no_grad():
-
-    for images, labels in train_loader:
+    for i, (images, labels) in enumerate(train_loader):
 
         images = images.to(device)
 
-        features = feature_extractor(images)
+        features = feature_model(images)
 
         all_features.append(features.cpu())
         all_labels.append(labels)
 
-        
-        # Start with 2,000 images
-        if sum(x.size(0) for x in all_features) >= 2000:
-            break
+        if (i + 1) % 100 == 0:
+            print("Batches processed:", i + 1)
 
-
-# Combine batches
+# Combine all batches
 features = torch.cat(all_features, dim=0)
 labels = torch.cat(all_labels, dim=0)
 
-
-# Keep exactly 2,000 samples
-features = features[:2000]
-labels = labels[:2000]
-
-
-# Save features
+# Save all features and labels
 torch.save(
     {
         "features": features,
@@ -89,8 +79,8 @@ torch.save(
     "gtsrb_features.pt"
 )
 
-
-print("Feature extraction complete.")
-print("Feature shape:", features.shape)
-print("Label shape:", labels.shape)
+print("\nFeature extraction complete.")
+print("Number of samples:", features.shape[0])
+print("Features per sample:", features.shape[1])
+print("Labels:", labels.shape[0])
 print("Saved as: gtsrb_features.pt")

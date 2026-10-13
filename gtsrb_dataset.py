@@ -33,7 +33,7 @@ class GTSRB(Dataset):
 
 transform = transforms.Compose([
     transforms.Resize((32, 32)),
-    transforms.ToTensor(),
+    transforms.ToTensor(),   #converting our PIL Image to Pytorch tensor(3*32*32=3RGB Channels,32 width,32 height)
     transforms.Normalize(
         (0.5, 0.5, 0.5),
         (0.5, 0.5, 0.5)

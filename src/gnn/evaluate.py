@@ -1,38 +1,44 @@
+import os
 import torch
-import matplotlib.pyplot as plt
+import pandas as pd
 
-from sklearn.metrics import confusion_matrix
-
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 from src.gnn.model import GCN
-
-
-GRAPH_PATH = "data/processed/graph.pt"
-MODEL_PATH = "experiments/checkpoints/gcn.pth"
 
 
 def main():
 
-    device = torch.device(
-        "cuda" if torch.cuda.is_available()
-        else "cpu"
-    )
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    data = torch.load(
-        GRAPH_PATH,
+    # Load graph and split
+    graph = torch.load(
+        "gtsrb_graph.pt",
+        map_location="cpu",
         weights_only=False
     )
 
-    data = data.to(device)
+    split = torch.load(
+        "gtsrb_gcn_split.pt",
+        map_location="cpu",
+        weights_only=False
+    )
 
+    x = graph["features"].float().to(device)
+    y = graph["labels"].long().to(device)
+    edges = graph["edge_index"].long().to(device)
+
+    test_mask = split["heldout_mask"].to(device)
+
+    # Load trained GCN
     model = GCN(
-        input_features=data.x.shape[1],
-        hidden_features=64,
-        num_classes=58
+        input_features=128,
+        hidden_features=128,
+        num_classes=43
     ).to(device)
 
     model.load_state_dict(
         torch.load(
-            MODEL_PATH,
+            "gtsrb_gcn.pth",
             map_location=device,
             weights_only=True
         )
@@ -40,57 +46,50 @@ def main():
 
     model.eval()
 
+    # Predict classes
     with torch.no_grad():
+        output = model(x, edges)
+        pred = output.argmax(dim=1)
 
-        output = model(
-            data.x,
-            data.edge_index
-        )
+    actual = y[test_mask].cpu().numpy()
+    predicted = pred[test_mask].cpu().numpy()
 
-        predictions = output.argmax(
-            dim=1
-        )
+    # Calculate results
+    acc = accuracy_score(actual, predicted)
+    f1 = f1_score(
+        actual,
+        predicted,
+        average="macro",
+        zero_division=0
+    )
 
-    y_true = data.y[
-        data.test_mask
-    ].cpu().numpy()
+    print("\nGCN Results")
+    print("Accuracy:", round(acc * 100, 2), "%")
+    print("Macro F1:", round(f1, 4))
+    print("Images evaluated:", len(actual))
 
-    y_pred = predictions[
-        data.test_mask
-    ].cpu().numpy()
-
+    # Create confusion matrix
     matrix = confusion_matrix(
-        y_true,
-        y_pred
+        actual,
+        predicted,
+        labels=list(range(43))
     )
 
-    plt.figure(
-        figsize=(10, 10)
+    # Save only as CSV
+    os.makedirs("experiments/results", exist_ok=True)
+
+    table = pd.DataFrame(
+        matrix,
+        index=[f"True_{i}" for i in range(43)],
+        columns=[f"Pred_{i}" for i in range(43)]
     )
 
-    plt.imshow(matrix)
-
-    plt.xlabel(
-        "Predicted Class"
+    table.to_csv(
+        "experiments/results/gcn_confusion_matrix.csv",
+        index_label="Actual_Class"
     )
 
-    plt.ylabel(
-        "True Class"
-    )
-
-    plt.title(
-        "GNN Confusion Matrix"
-    )
-
-    plt.colorbar()
-
-    plt.savefig(
-        "experiments/results/gcn_confusion_matrix.png"
-    )
-
-    print(
-        "Confusion matrix saved."
-    )
+    print("Confusion matrix saved to experiments/results/gcn_confusion_matrix.csv")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import torch
 
 
 # Load graph
-data = torch.load("gtsrb_graph.pt")
+data = torch.load("gtsrb_graph.pt",map_location="cpu", weights_only=False)
 
 features = data["features"]
 labels = data["labels"]
